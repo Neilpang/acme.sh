@@ -78,8 +78,11 @@ _get_root() {
 }
 
 _ali_rest() {
-  signature=$(printf "%s" "GET&%2F&$(_ali_urlencode "$query")" | _hmac "sha1" "$(printf "%s" "$Ali_Secret&" | _hex_dump | tr -d " ")" | _base64)
+  _sign_str=$(printf "%s" "GET&%2F&$(_ali_urlencode "$query")")
+  _debug2 _sign_str _sign_str
+  signature=$(printf "%s" "$_sign_str" | _hmac "sha1" "$(printf "%s" "$Ali_Secret&" | _hex_dump | tr -d " ")" | _base64)
   signature=$(_ali_urlencode "$signature")
+  _debug2 signature "$signature"
   url="$Ali_API?$query&Signature=$signature"
 
   if ! response="$(_get "$url")"; then
@@ -97,21 +100,225 @@ _ali_rest() {
   fi
 }
 
-_ali_urlencode() {
-  _str="$1"
-  _str_len=${#_str}
-  _u_i=1
-  while [ "$_u_i" -le "$_str_len" ]; do
-    _str_c="$(printf "%s" "$_str" | cut -c "$_u_i")"
-    case $_str_c in [a-zA-Z0-9.~_-])
-      printf "%s" "$_str_c"
-      ;;
-    *)
-      printf "%%%02X" "'$_str_c"
-      ;;
+_ali_url_encode() {
+  _hex_str=$(_hex_dump)
+  _debug3 "_url_encode"
+  _debug3 "_hex_str" "$_hex_str"
+  for _hex_code in $_hex_str; do
+    #upper case
+    case "${_hex_code}" in
+      "41")
+        printf "%s" "A"
+        ;;
+      "42")
+        printf "%s" "B"
+        ;;
+      "43")
+        printf "%s" "C"
+        ;;
+      "44")
+        printf "%s" "D"
+        ;;
+      "45")
+        printf "%s" "E"
+        ;;
+      "46")
+        printf "%s" "F"
+        ;;
+      "47")
+        printf "%s" "G"
+        ;;
+      "48")
+        printf "%s" "H"
+        ;;
+      "49")
+        printf "%s" "I"
+        ;;
+      "4a")
+        printf "%s" "J"
+        ;;
+      "4b")
+        printf "%s" "K"
+        ;;
+      "4c")
+        printf "%s" "L"
+        ;;
+      "4d")
+        printf "%s" "M"
+        ;;
+      "4e")
+        printf "%s" "N"
+        ;;
+      "4f")
+        printf "%s" "O"
+        ;;
+      "50")
+        printf "%s" "P"
+        ;;
+      "51")
+        printf "%s" "Q"
+        ;;
+      "52")
+        printf "%s" "R"
+        ;;
+      "53")
+        printf "%s" "S"
+        ;;
+      "54")
+        printf "%s" "T"
+        ;;
+      "55")
+        printf "%s" "U"
+        ;;
+      "56")
+        printf "%s" "V"
+        ;;
+      "57")
+        printf "%s" "W"
+        ;;
+      "58")
+        printf "%s" "X"
+        ;;
+      "59")
+        printf "%s" "Y"
+        ;;
+      "5a")
+        printf "%s" "Z"
+        ;;
+
+      #lower case
+      "61")
+        printf "%s" "a"
+        ;;
+      "62")
+        printf "%s" "b"
+        ;;
+      "63")
+        printf "%s" "c"
+        ;;
+      "64")
+        printf "%s" "d"
+        ;;
+      "65")
+        printf "%s" "e"
+        ;;
+      "66")
+        printf "%s" "f"
+        ;;
+      "67")
+        printf "%s" "g"
+        ;;
+      "68")
+        printf "%s" "h"
+        ;;
+      "69")
+        printf "%s" "i"
+        ;;
+      "6a")
+        printf "%s" "j"
+        ;;
+      "6b")
+        printf "%s" "k"
+        ;;
+      "6c")
+        printf "%s" "l"
+        ;;
+      "6d")
+        printf "%s" "m"
+        ;;
+      "6e")
+        printf "%s" "n"
+        ;;
+      "6f")
+        printf "%s" "o"
+        ;;
+      "70")
+        printf "%s" "p"
+        ;;
+      "71")
+        printf "%s" "q"
+        ;;
+      "72")
+        printf "%s" "r"
+        ;;
+      "73")
+        printf "%s" "s"
+        ;;
+      "74")
+        printf "%s" "t"
+        ;;
+      "75")
+        printf "%s" "u"
+        ;;
+      "76")
+        printf "%s" "v"
+        ;;
+      "77")
+        printf "%s" "w"
+        ;;
+      "78")
+        printf "%s" "x"
+        ;;
+      "79")
+        printf "%s" "y"
+        ;;
+      "7a")
+        printf "%s" "z"
+        ;;
+      #numbers
+      "30")
+        printf "%s" "0"
+        ;;
+      "31")
+        printf "%s" "1"
+        ;;
+      "32")
+        printf "%s" "2"
+        ;;
+      "33")
+        printf "%s" "3"
+        ;;
+      "34")
+        printf "%s" "4"
+        ;;
+      "35")
+        printf "%s" "5"
+        ;;
+      "36")
+        printf "%s" "6"
+        ;;
+      "37")
+        printf "%s" "7"
+        ;;
+      "38")
+        printf "%s" "8"
+        ;;
+      "39")
+        printf "%s" "9"
+        ;;
+      "2d")
+        printf "%s" "-"
+        ;;
+      "5f")
+        printf "%s" "_"
+        ;;
+      "2e")
+        printf "%s" "."
+        ;;
+      "7e")
+        printf "%s" "~"
+        ;;
+      #other hex
+      *)
+        printf '%%%s' "$_hex_code" | tr '[:lower:]' '[:upper:]'
+        ;;
     esac
-    _u_i="$(_math "$_u_i" + 1)"
   done
+}
+
+_ali_urlencode() {
+  _str=$(printf "%s" "$1" | _ali_url_encode)
+  printf "%s" "$_str"
 }
 
 _ali_nonce() {
@@ -121,8 +328,8 @@ _ali_nonce() {
 }
 
 _check_exist_query() {
-  _qdomain="$1"
-  _qsubdomain="$2"
+  _qdomain=$(_ali_urlencode "$1")
+  _qsubdomain=$(_ali_urlencode "$2")
   query=''
   query=$query'AccessKeyId='$Ali_Key
   query=$query'&Action=DescribeDomainRecords'
@@ -141,7 +348,7 @@ _add_record_query() {
   query=''
   query=$query'AccessKeyId='$Ali_Key
   query=$query'&Action=AddDomainRecord'
-  query=$query'&DomainName='$1
+  query=$query'&DomainName='$(_ali_urlencode "$1")
   query=$query'&Format=json'
   query=$query'&RR='$2
   query=$query'&SignatureMethod=HMAC-SHA1'
@@ -170,7 +377,7 @@ _describe_records_query() {
   query=''
   query=$query'AccessKeyId='$Ali_Key
   query=$query'&Action=DescribeDomainRecords'
-  query=$query'&DomainName='$1
+  query=$query'&DomainName='$(_ali_urlencode "$1")
   query=$query'&Format=json'
   query=$query'&SignatureMethod=HMAC-SHA1'
   query=$query"&SignatureNonce=$(_ali_nonce)"
