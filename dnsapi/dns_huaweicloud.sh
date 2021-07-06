@@ -3,6 +3,7 @@
 # HUAWEICLOUD_Username
 # HUAWEICLOUD_Password
 # HUAWEICLOUD_ProjectID
+# HUAWEICLOUD_AuthType=main/sub
 
 iam_api="https://iam.myhuaweicloud.com"
 dns_api="https://dns.ap-southeast-1.myhuaweicloud.com" # Should work
@@ -22,6 +23,7 @@ dns_huaweicloud_add() {
   HUAWEICLOUD_Username="${HUAWEICLOUD_Username:-$(_readaccountconf_mutable HUAWEICLOUD_Username)}"
   HUAWEICLOUD_Password="${HUAWEICLOUD_Password:-$(_readaccountconf_mutable HUAWEICLOUD_Password)}"
   HUAWEICLOUD_ProjectID="${HUAWEICLOUD_ProjectID:-$(_readaccountconf_mutable HUAWEICLOUD_ProjectID)}"
+  HUAWEICLOUD_AuthType="${HUAWEICLOUD_AuthType:-$(_readaccountconf_mutable HUAWEICLOUD_AuthType)}"
 
   # Check information
   if [ -z "${HUAWEICLOUD_Username}" ] || [ -z "${HUAWEICLOUD_Password}" ] || [ -z "${HUAWEICLOUD_ProjectID}" ]; then
@@ -29,8 +31,13 @@ dns_huaweicloud_add() {
     return 1
   fi
 
+  # Check Auth Type
+  if [ -z "${HUAWEICLOUD_AuthType}" ]; then
+    HUAWEICLOUD_AuthType="main"
+  fi
+
   unset token # Clear token
-  token="$(_get_token "${HUAWEICLOUD_Username}" "${HUAWEICLOUD_Password}" "${HUAWEICLOUD_ProjectID}")"
+  token="$(_get_token "${HUAWEICLOUD_Username}" "${HUAWEICLOUD_Password}" "${HUAWEICLOUD_ProjectID}" "${HUAWEICLOUD_AuthType}")"
   if [ -z "${token}" ]; then # Check token
     _err "dns_api(dns_huaweicloud): Error getting token."
     return 1
@@ -57,6 +64,7 @@ dns_huaweicloud_add() {
   _saveaccountconf_mutable HUAWEICLOUD_Username "${HUAWEICLOUD_Username}"
   _saveaccountconf_mutable HUAWEICLOUD_Password "${HUAWEICLOUD_Password}"
   _saveaccountconf_mutable HUAWEICLOUD_ProjectID "${HUAWEICLOUD_ProjectID}"
+  _saveaccountconf_mutable HUAWEICLOUD_AuthType "${HUAWEICLOUD_AuthType}"
   return 0
 }
 
@@ -73,6 +81,7 @@ dns_huaweicloud_rm() {
   HUAWEICLOUD_Username="${HUAWEICLOUD_Username:-$(_readaccountconf_mutable HUAWEICLOUD_Username)}"
   HUAWEICLOUD_Password="${HUAWEICLOUD_Password:-$(_readaccountconf_mutable HUAWEICLOUD_Password)}"
   HUAWEICLOUD_ProjectID="${HUAWEICLOUD_ProjectID:-$(_readaccountconf_mutable HUAWEICLOUD_ProjectID)}"
+  HUAWEICLOUD_AuthType="${HUAWEICLOUD_AuthType:-$(_readaccountconf_mutable HUAWEICLOUD_AuthType)}"
 
   # Check information
   if [ -z "${HUAWEICLOUD_Username}" ] || [ -z "${HUAWEICLOUD_Password}" ] || [ -z "${HUAWEICLOUD_ProjectID}" ]; then
@@ -80,8 +89,13 @@ dns_huaweicloud_rm() {
     return 1
   fi
 
+  # Check Auth Type
+  if [ -z "${HUAWEICLOUD_AuthType}" ]; then
+    HUAWEICLOUD_AuthType="main"
+  fi
+
   unset token # Clear token
-  token="$(_get_token "${HUAWEICLOUD_Username}" "${HUAWEICLOUD_Password}" "${HUAWEICLOUD_ProjectID}")"
+  token="$(_get_token "${HUAWEICLOUD_Username}" "${HUAWEICLOUD_Password}" "${HUAWEICLOUD_ProjectID}" "${HUAWEICLOUD_AuthType}")"
   if [ -z "${token}" ]; then # Check token
     _err "dns_api(dns_huaweicloud): Error getting token."
     return 1
@@ -240,31 +254,62 @@ _get_token() {
   _username=$1
   _password=$2
   _project=$3
+  _auth=$4
 
-  _debug "Getting Token"
-  body="{
-    \"auth\": {
-      \"identity\": {
-        \"methods\": [
-          \"password\"
-        ],
-        \"password\": {
-          \"user\": {
-            \"name\": \"${_username}\",
-            \"password\": \"${_password}\",
-            \"domain\": {
-              \"name\": \"${_username}\"
+  _debug "Getting Token | $_auth"
+  if [ "${_auth}" = 'main' ]; then
+
+    body="{
+       \"auth\": {
+         \"identity\": {
+           \"methods\": [
+             \"password\"
+           ],
+           \"password\": {
+             \"user\": {
+               \"name\": \"${_username}\",
+               \"password\": \"${_password}\",
+               \"domain\": {
+                 \"name\": \"${_username}\"
+               }
+             }
+           }
+         },
+         \"scope\": {
+           \"project\": {
+             \"id\": \"${_project}\"
+           }
+         }
+       }
+     }"
+  else
+    _iam_user=$(echo "$_username" | awk -F@ '{print $1}')
+    _iam_domain=$(echo "$_username" | awk -F@ '{print $2}')
+
+    body="{
+      \"auth\": {
+        \"identity\": {
+          \"methods\": [
+            \"password\"
+          ],
+          \"password\": {
+            \"user\": {
+              \"name\": \"${_iam_user}\",
+              \"password\": \"${_password}\",
+              \"domain\": {
+                \"name\": \"${_iam_domain}\"
+              }
             }
           }
-        }
-      },
-      \"scope\": {
-        \"project\": {
-          \"id\": \"${_project}\"
+        },
+        \"scope\": {
+          \"project\": {
+            \"id\": \"${_project}\"
+          }
         }
       }
-    }
-  }"
+    }"
+  fi
   export _H1="Content-Type: application/json;charset=utf8"
   _post "${body}" "${iam_api}/v3/auth/tokens" >/dev/null
   _code=$(grep "^HTTP" "$HTTP_HEADER" | _tail_n 1 | cut -d " " -f 2 | tr -d "\\r\\n")
