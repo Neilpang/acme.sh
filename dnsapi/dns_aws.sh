@@ -152,50 +152,58 @@ dns_aws_rm() {
 
 _get_root() {
   domain=$1
-  i=2
-  p=1
+  # Start with field 2 since each domain starts with _acme-challenge
+  # Example: _acme-challenge.www.domain.com
+  field=2
+  subdomain_part=1
 
-  if aws_rest GET "2013-04-01/hostedzone"; then
-    while true; do
-      h=$(printf "%s" "$domain" | cut -d . -f $i-100)
-      _debug2 "Checking domain: $h"
-      if [ -z "$h" ]; then
-        if _contains "$response" "<IsTruncated>true</IsTruncated>" && _contains "$response" "<NextMarker>"; then
-          _debug "IsTruncated"
-          _nextMarker="$(echo "$response" | _egrep_o "<NextMarker>.*</NextMarker>" | cut -d '>' -f 2 | cut -d '<' -f 1)"
-          _debug "NextMarker" "$_nextMarker"
-          if aws_rest GET "2013-04-01/hostedzone" "marker=$_nextMarker"; then
-            _debug "Truncated request OK"
-            i=2
-            p=1
-            continue
-          else
-            _err "Truncated request error."
-          fi
-        fi
-        #not valid
-        _err "Invalid domain"
-        return 1
-      fi
+  while true; do
+    hostname=$(printf "%s" "$domain" | cut -d . -f $field-100)
 
-      if _contains "$response" "<Name>$h.</Name>"; then
-        hostedzone="$(echo "$response" | sed 's/<HostedZone>/#&/g' | tr '#' '\n' | _egrep_o "<HostedZone><Id>[^<]*<.Id><Name>$h.<.Name>.*<PrivateZone>false<.PrivateZone>.*<.HostedZone>")"
+    if [ -z "$hostname" ]
+    then
+      _debug "There are no more fields in the hostname to check"
+      _err "No matching Route 53 hosted zones for: $domain"
+      return 1
+    fi
+
+    _debug "Checking domain: $hostname"
+
+    if aws_rest GET "2013-04-01/hostedzonesbyname" "dnsname=$hostname&maxitems=1"; then
+      if _contains "$response" "<Name>$hostname.</Name>"; then
+        hostedzone="$(echo "$response" | sed 's/<HostedZone>/#&/g' | tr '#' '\n' | _egrep_o "<HostedZone><Id>[^<]*<.Id><Name>$hostname.<.Name>.*<PrivateZone>false<.PrivateZone>.*<.HostedZone>")"
         _debug hostedzone "$hostedzone"
         if [ "$hostedzone" ]; then
           _domain_id=$(printf "%s\n" "$hostedzone" | _egrep_o "<Id>.*<.Id>" | head -n 1 | _egrep_o ">.*<" | tr -d "<>")
           if [ "$_domain_id" ]; then
-            _sub_domain=$(printf "%s" "$domain" | cut -d . -f 1-$p)
-            _domain=$h
+            _sub_domain=$(printf "%s" "$domain" | cut -d . -f 1-$subdomain_part)
+            _domain=$hostname
             return 0
           fi
-          _err "Can't find domain with id: $h"
+          _err "Can't find domain with id: $hostname"
           return 1
         fi
+      else
+        _debug "Route 53 does not have a hosted zone for: $hostname."
+        _debug "Moving on to next part of the hostname"
       fi
-      p=$i
-      i=$(_math "$i" + 1)
-    done
-  fi
+    else
+      _err "Getting Route 53 hosted zones by name failed for: $domain"
+      return 1
+    fi
+
+    subdomain_part=$field
+    field=$(_math "$field" + 1)
+
+    if [ -n "$AWS_DNS_SLOWRATE" ]; then
+      _info "Slow rate activated: sleeping for $AWS_DNS_SLOWRATE seconds"
+      _sleep "$AWS_DNS_SLOWRATE"
+    else
+      _sleep 1
+    fi
+  done
+
+  _err "_get_root failed for domain: $domain"
   return 1
 }
 
