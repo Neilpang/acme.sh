@@ -29,6 +29,20 @@ dns_aws_add() {
     _use_container_role || _use_instance_role
   fi
 
+  # if not already set, attempt to get AWS creds from a local creds file.
+  # this is naive, it just grabs the first values from .aws/credentials
+  # it does not honour [sections] in the ini formatted credentials file.
+  if [ -z "$AWS_ACCESS_KEY_ID" ] || [ -z "$AWS_SECRET_ACCESS_KEY" ]; then
+    CREDFILE="${HOME}/.aws/credentials"
+    if [ -e "$CREDFILE" ]; then
+      AWS_ACCESS_KEY_ID=$(grep -m 1 -i AWS_ACCESS_KEY_ID "$CREDFILE" | cut -f 2 -d"=" | tr -d ' ')
+      AWS_SECRET_ACCESS_KEY=$(grep -m 1 -i AWS_SECRET_ACCESS_KEY "$CREDFILE" | cut -f 2 -d"=" | tr -d ' ')
+    fi
+    # todo: if the key is found in the creds file, then if we can assume it'll be there in the future,
+    # then there's likely no point saving it in the account config, so we should do what needs to be done
+    # to disable saving the AWS creds in the acme.sh config.
+  fi
+  
   if [ -z "$AWS_ACCESS_KEY_ID" ] || [ -z "$AWS_SECRET_ACCESS_KEY" ]; then
     AWS_ACCESS_KEY_ID=""
     AWS_SECRET_ACCESS_KEY=""
